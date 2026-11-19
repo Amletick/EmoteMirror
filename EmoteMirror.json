@@ -1,0 +1,10 @@
+{
+  "Author": "Amletick",
+  "Name": "Emote Mirror",
+  "Punchline": "Copies the dance/emote mod of whoever emotes at you.",
+  "Description": "When a (Lightless-synced) player uses an emote on you, Emote Mirror copies their modded animation, VFX and sounds onto you as a temporary Penumbra mod and replies with the same emote. Friend-only / party-only filters and a nickname blacklist. Appearance try-on moved to the separate Look Mirror plugin.",
+  "InternalName": "EmoteMirror",
+  "ApplicableVersion": "any",
+  "Tags": ["emote", "penumbra"],
+  "RepoUrl": "https://github.com/Amletick/EmoteMirror"
+}
