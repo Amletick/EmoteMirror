@@ -10,6 +10,15 @@ Appearance try-on that used to live here moved to **[Look Mirror](https://github
 - **Nickname blacklist**: `Name Surname` (any world) or `Name Surname@World`
 - Option to mute copied sounds; open the window together with the Emote window
 
+## Install
+In game: `/xlsettings` → **Experimental** → **Custom Plugin Repositories**, add
+
+```
+https://raw.githubusercontent.com/Amletick/EmoteMirror/main/repo.json
+```
+
+tick it, **Save**, then find the plugin in `/xlplugins`.
+
 ## Commands
 `/emotemirror` — window  
 `/emotemirror on | off | reply | debug`  
