@@ -26,7 +26,7 @@ public sealed partial class Plugin
 {
     private readonly WindowSystem windows = new("EmoteMirror");
     private MainWindow? mainWindow;
-    private string blockInput = string.Empty;
+    private string blackInput = string.Empty, whiteInput = string.Empty;
 
     private void InitUi()
     {
@@ -60,7 +60,7 @@ public sealed partial class Plugin
             var friends = cfg.OnlyFriends;
             if (ImGui.Checkbox("Применять только к игрокам из списка друзей", ref friends)) { cfg.OnlyFriends = friends; changed = true; }
             var party = cfg.OnlyParty;
-            if (ImGui.Checkbox("Применять только к участникам группы", ref party)) { cfg.OnlyParty = party; changed = true; }
+            if (ImGui.Checkbox("Применять только к участникам группы (и кросс-ворлд)", ref party)) { cfg.OnlyParty = party; changed = true; }
             var syncFriends = cfg.SyncFriends;
             if (ImGui.Checkbox("Синхронизировать список друзей вне данжей", ref syncFriends)) { cfg.SyncFriends = syncFriends; changed = true; }
             var mute = cfg.MuteCopiedSound;
@@ -80,36 +80,54 @@ public sealed partial class Plugin
             else ImGui.TextDisabled("Сейчас ничего не повторяю");
         }
 
-        // ---- blacklist
+        // ---- white / black lists
+        if (ImGui.CollapsingHeader("Белый список", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            var ow = cfg.OnlyWhitelist;
+            if (ImGui.Checkbox("Копировать только у игроков из белого списка", ref ow))
+            {
+                cfg.OnlyWhitelist = ow; Save();
+                if (ow && appliedTo != Guid.Empty && Objects[sourceIndex] is IPlayerCharacter src && src.Address == sourceAddr && !Allowed(src, out _)) Clear();
+            }
+            ImGui.TextDisabled("Эти игроки проходят всегда, даже если не друзья и не в группе.");
+            DrawList(White, ref whiteInput);
+        }
         if (ImGui.CollapsingHeader("Чёрный список", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.TextDisabled("Эмоции этих игроков не копируются. Формат: Имя Фамилия или Имя Фамилия@Мир.");
-            ImGui.SetNextItemWidth(-130);
-            var enter = ImGui.InputTextWithHint("##blockname", "Имя Фамилия[@Мир]", ref blockInput, 64, ImGuiInputTextFlags.EnterReturnsTrue);
-            ImGui.SameLine();
-            if ((ImGui.Button("Добавить") || enter) && blockInput.Trim().Length > 0)
-            {
-                if (Block(blockInput, false)) blockInput = string.Empty;
-            }
-            ImGui.SameLine();
-            var target = Targets.Target as IPlayerCharacter;
-            var me = Objects.LocalPlayer;
-            if (target == null || target.Address == me?.Address) ImGui.BeginDisabled();
-            if (ImGui.Button("Таргет") && target != null)
-                Block($"{target.Name.TextValue}@{target.HomeWorld.ValueNullable?.Name.ExtractText()}", false);
-            if (target == null || target.Address == me?.Address) ImGui.EndDisabled();
-
-            if (cfg.Blacklist.Count == 0) ImGui.TextDisabled("Пусто");
-            string? remove = null;
-            foreach (var e in cfg.Blacklist)
-            {
-                ImGui.PushID(e);
-                if (ImGui.SmallButton("x")) remove = e;
-                ImGui.SameLine();
-                ImGui.TextUnformatted(e);
-                ImGui.PopID();
-            }
-            if (remove != null) Unblock(remove, false);
+            ImGui.TextDisabled("Эмоции этих игроков не копируются никогда.");
+            DrawList(Black, ref blackInput);
         }
+    }
+
+    private void DrawList(NameList l, ref string input)
+    {
+        ImGui.PushID(l.Title);
+        ImGui.SetNextItemWidth(-130);
+        var enter = ImGui.InputTextWithHint("##name", "Имя Фамилия[@Мир]", ref input, 64, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SameLine();
+        if ((ImGui.Button("Добавить") || enter) && input.Trim().Length > 0)
+        {
+            if (Add(l, input, false)) input = string.Empty;
+        }
+        ImGui.SameLine();
+        var target = Targets.Target as IPlayerCharacter;
+        var noTarget = target == null || target.Address == Objects.LocalPlayer?.Address;
+        if (noTarget) ImGui.BeginDisabled();
+        if (ImGui.Button("Таргет") && target != null) Add(l, Entry(target), false);
+        if (noTarget) ImGui.EndDisabled();
+
+        var list = l.Get(cfg);
+        if (list.Count == 0) ImGui.TextDisabled("Пусто");
+        string? remove = null;
+        foreach (var e in list)
+        {
+            ImGui.PushID(e);
+            if (ImGui.SmallButton("x")) remove = e;
+            ImGui.SameLine();
+            ImGui.TextUnformatted(e);
+            ImGui.PopID();
+        }
+        if (remove != null) Remove(l, remove, false);
+        ImGui.PopID();
     }
 }

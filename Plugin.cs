@@ -39,6 +39,8 @@ public class Config : IPluginConfiguration
     public bool OpenWithEmoteWindow { get; set; } = false;
     public bool MuteCopiedSound { get; set; } = false;
     public List<string> Blacklist { get; set; } = new();
+    public List<string> Whitelist { get; set; } = new();
+    public bool OnlyWhitelist { get; set; } = false;
 }
 
 public sealed unsafe partial class Plugin : IDalamudPlugin
@@ -55,6 +57,7 @@ public sealed unsafe partial class Plugin : IDalamudPlugin
     [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
+    [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
 
     private const string Tag = "EmoteMirror";
     private const int Priority = 9999;
@@ -121,7 +124,7 @@ public sealed unsafe partial class Plugin : IDalamudPlugin
         InitUi();
         Commands.AddHandler("/emotemirror", new CommandInfo(OnCommand)
         {
-            HelpMessage = "on | off | reply (вкл/выкл самостоятельный ответ) | debug | block [Имя Фамилия[@Мир]] (без имени — таргет) | unblock <имя> | blacklist",
+            HelpMessage = "on | off | reply (вкл/выкл самостоятельный ответ) | debug | block/allow [Имя Фамилия[@Мир]] (без имени — таргет) | unblock/unallow <имя> | blacklist | whitelist | onlywhite",
         });
     }
 
@@ -149,9 +152,16 @@ public sealed unsafe partial class Plugin : IDalamudPlugin
         var rest = sp < 0 ? string.Empty : a[(sp + 1)..].Trim();
         switch (verb)
         {
-            case "block": BlockFromCommand(rest); return;
-            case "unblock": Unblock(rest, true); return;
-            case "blacklist": PrintBlacklist(); return;
+            case "block": AddFromCommand(Black, rest); return;
+            case "unblock": Remove(Black, rest, true); return;
+            case "blacklist": PrintList(Black); return;
+            case "allow": AddFromCommand(White, rest); return;
+            case "unallow": Remove(White, rest, true); return;
+            case "whitelist": PrintList(White); return;
+            case "onlywhite":
+                cfg.OnlyWhitelist = !cfg.OnlyWhitelist; Save();
+                Chat.Print($"[EmoteMirror] только белый список: {(cfg.OnlyWhitelist ? "да" : "нет")}");
+                return;
             case "on": cfg.Enabled = true; break;
             case "off": cfg.Enabled = false; Clear(); break;
             case "reply": cfg.ReplyMyself = !cfg.ReplyMyself; break;
@@ -181,12 +191,10 @@ public sealed unsafe partial class Plugin : IDalamudPlugin
                 var src = Objects.FirstOrDefault(o => (ulong)o.Address == instigatorAddr);
                 if (src is Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter pc)
                 {
-                    var friend = !cfg.OnlyFriends || IsFriend(pc);
-                    var party = !cfg.OnlyParty || pc.StatusFlags.HasFlag(Dalamud.Game.ClientState.Objects.Enums.StatusFlags.PartyMember);
                     var worldName = pc.HomeWorld.ValueNullable?.Name.ExtractText() ?? "?";
-                    var blocked = IsBlocked(pc);
-                    Dbg($"эмоция: {pc.Name.TextValue} @ {worldName} (worldId={pc.HomeWorld.RowId}), friend={friend}, party={party}, blocked={blocked}, flags={pc.StatusFlags}");
-                    if (friend && party && !blocked) Start(src.Address, src.ObjectIndex, emoteId);
+                    var allowed = Allowed(pc, out var why);
+                    Dbg($"эмоция: {pc.Name.TextValue} @ {worldName} (worldId={pc.HomeWorld.RowId}), {why}, flags={pc.StatusFlags}");
+                    if (allowed) Start(src.Address, src.ObjectIndex, emoteId);
                 }
                 else if (src == null)
                 {
@@ -398,9 +406,7 @@ public sealed unsafe partial class Plugin : IDalamudPlugin
             {
                 var pending = Objects.FirstOrDefault(o => (nint)o.Address == pendingSourceAddr);
                 if (pending is Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter pc
-                    && !IsBlocked(pc)
-                    && (!cfg.OnlyFriends || IsFriend(pc))
-                    && (!cfg.OnlyParty || pc.StatusFlags.HasFlag(Dalamud.Game.ClientState.Objects.Enums.StatusFlags.PartyMember)))
+                    && Allowed(pc, out var _why))
                 {
                     var addr = pending.Address;
                     var idx = pending.ObjectIndex;
